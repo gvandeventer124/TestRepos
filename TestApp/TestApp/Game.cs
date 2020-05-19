@@ -6,10 +6,9 @@ using System.Threading.Tasks;
 
 namespace TestApp
 {
-    class Deck
+    public class Game
     {
-        public string id { get; set; }
-        public int wins;
-        public int games;
+        public string playerName {get;set;}
+        public int teamID { get; set; }
     }
 }

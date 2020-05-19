@@ -69,6 +69,7 @@
     </Compile>
     <Compile Include="Deck.cs" />
     <Compile Include="DecklistsProcessr.cs" />
+    <Compile Include="Game.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
