@@ -14,6 +14,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 
 namespace TestApp
 {
@@ -22,15 +23,20 @@ namespace TestApp
     /// </summary>
     public partial class MainWindow : Window
     {
-        List<Deck> playerDecks;
         public int gamestate;
         public string LocalPlayerName;
         public Game ActiveGame;
+        public Dictionary<string,Deck> playerDecks;
+        public MainWindowFunctions windowFunctions;
+        public DispatcherTimer timer;
+        public int bookmark;
         public MainWindow()
         {
             InitializeComponent();
+            timer.Start();
             ActiveGame = new Game();
-            playerDecks = new List<Deck>();
+            playerDecks = new Dictionary<string, Deck>();
+            windowFunctions = new MainWindowFunctions();
             var dir = "S:\\AVAC\\Arena\\MTGArena\\MTGA_Data\\Logs\\Logs\\";
             var directory = new DirectoryInfo(dir);
             var myFile = (from f in directory.GetFiles()
@@ -43,17 +49,18 @@ namespace TestApp
             string deckIDLine = "Currently Empty";
             foreach (string s in lines)
             {
-                if (s.Contains("[UnityCrossThreadLogger]<== Deck.GetDeckListsV3"))
-                {
-                    deckIDLine = s;
-                    break;
-                }
                 if (s.Contains("[Accounts - Client] Successfully logged in to account: "))
                 {
                     string[] x = s.Split(new string[] { "[Accounts - Client] Successfully logged in to account: " }, StringSplitOptions.None);
                     LocalPlayerName = x[1];
                     //Console.WriteLine("Player Name:" + LocalPlayerName);
                 }
+                if (s.Contains("[UnityCrossThreadLogger]<== Deck.GetDeckListsV3"))
+                {
+                    deckIDLine = s;
+                    break;
+                }
+                
             }
             // Console.Out.WriteLine(deckIDLine);
             string[] split = deckIDLine.Split(new string[] { "\"payload\":[" }, StringSplitOptions.None);
@@ -68,66 +75,75 @@ namespace TestApp
                 {
                     deckjsons[i] = deckjsons[i].Substring(0, deckjsons[i].Length - 1);
                 }
-                //playerDecks.Add(DecklistsProcessr.generateDeckCode("{\"commandZoneGRPIds\"" + deckjsons[i]));
+                Deck tempDeck = DecklistsProcessr.generateDeckCode("{\"commandZoneGRPIds\"" + deckjsons[i]);
+                playerDecks.Add(tempDeck.id, tempDeck);
             }
-            foreach (Deck d in playerDecks)
-            {
-                //Console.Out.WriteLine("DeckCode: " + d.id);
-            }
+            windowFunctions.showWins(playerDecks);
             // In Game Status is status code 7 8 is post game 6 is game load. 6 -> 7 -> 8 
-            int bookmark = 0;
+            getGameState(lines);
+        }
+        
+        public void getGameState(string[] lines)
+        {
+            bookmark = lines.Length;
+            ActiveGame.playerName = LocalPlayerName;
             for (int i = 0; i < lines.Length; i++)
             {
-
                 if (gamestate == 0)
                 {
-                    if (lines[i].Contains("[UnityCrossThreadLogger]STATE CHANGED "))
+                    if (lines[i].Contains("[UnityCrossThreadLogger]<== Event.DeckSubmitV3"))
                     {
-                        bookmark = i;
-                        string[] n = lines[i].Split(new string[] { "\"new\":" }, StringSplitOptions.None);
-                        n[1] = n[1].Substring(0, 1);
-                        if (n[1] == "6") //game is being initialized.
+                        string[] temp = lines[i].Split(new string[] { "],\"id\":\"" }, StringSplitOptions.None);
+                        temp = temp[1].Split('"');
+                        string activeID = temp[0];
+                        ActiveGame.activeDeck = playerDecks[activeID];
+                        gamestate = 1;
+                    }
+                }
+                else if (gamestate == 1)
+                {
+                    if (lines[i].Contains(",\"new\":"))
+                    {
+                        string[] temp = lines[i].Split(new string[] { ",\"new\":" }, StringSplitOptions.None);
+                        if (temp[1].Contains("5"))
                         {
-                            gamestate = 6;
+                            string info = lines[i + 2];
+                            temp = info.Split(new string[] { ", \"playerName\": \"" }, StringSplitOptions.None);
+                            if (temp[1].Contains(LocalPlayerName))
+                            {
+                                ActiveGame.teamID = 1;
+
+                            }
+                            else
+                            {
+                                ActiveGame.teamID = 2;
+                            }
+
+                            Console.Out.WriteLine(ActiveGame.playerName + " " + ActiveGame.teamID + " " + ActiveGame.activeDeck.id);
+                            gamestate = 2;
                         }
                     }
                 }
-                else if (gamestate == 6)
+                else if (gamestate == 2)
                 {
-                    if (lines[i].Contains(": MatchGameRoomStateChangedEvent"))
+                    if (lines[i].Contains(",\"new\":"))
                     {
-                        bookmark = i;
-                        string relevantInfo = lines[i + 1];
-                        string[] relevantInfoSplit = relevantInfo.Split(new string[] { "\"reservedPlayers\": [ " }, StringSplitOptions.None);
-                        //Console.WriteLine(relevantInfoSplit.Length);
-                        string[] relevantReSplit = relevantInfoSplit[1].Split(new string[] { ", \"matchId\": " }, StringSplitOptions.None);
-                        string[] jsons = relevantReSplit[0].Split(new string[] { "}, { \"userId\"" }, StringSplitOptions.None);
-                        if (jsons[0].Contains(LocalPlayerName))
+                        string[] temp = lines[i].Split(new string[] { ",\"new\":" }, StringSplitOptions.None);
+                        if (temp[1].Contains("8"))
                         {
-                            ActiveGame.playerName = LocalPlayerName;
-                            ActiveGame.teamID = 1;
-                        }
-                        else
-                        {
-                            ActiveGame.playerName = LocalPlayerName;
-                            ActiveGame.teamID = 2;
-                        }
-                        Console.Out.WriteLine(ActiveGame.teamID);
-                        gamestate = 7;
-                    }
-                }
-                else if (gamestate == 7)
-                {
-                    if (lines[i].Contains("[UnityCrossThreadLogger]STATE CHANGED "))
-                    {
-                        string relevantline = lines[i - 1];
-                        relevantline = relevantline.Split(new string[] { "\"winningTeamId\": " }, StringSplitOptions.None)[1];
-                        if (relevantline.Contains(ActiveGame.teamID.ToString()))
-                        {
-                            //game won
-                        }
-                        else{
-                           //game lost
+                            string info = lines[i - 1];
+                            temp = info.Split(new string[] { "\"winningTeamId\": " }, StringSplitOptions.None);
+                            if (temp[1].Contains(ActiveGame.teamID.ToString()))
+                            {
+                                playerDecks[ActiveGame.activeDeck.id].wins++;
+                            }
+                            else
+                            {
+
+                            }
+                            playerDecks[ActiveGame.activeDeck.id].games++;
+                            gamestate = 0;
+                            windowFunctions.showWins(playerDecks);
                         }
                     }
                 }

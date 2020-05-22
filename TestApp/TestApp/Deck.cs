@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace TestApp
 {
-    class Deck
+    public class Deck
     {
         public string id { get; set; }
         public int wins;

@@ -10,5 +10,6 @@ namespace TestApp
     {
         public string playerName {get;set;}
         public int teamID { get; set; }
+        public Deck activeDeck;
     }
 }
